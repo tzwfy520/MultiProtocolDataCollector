@@ -1,0 +1,269 @@
+version: '3.8'
+
+services:
+  # MySQL数据库
+  mysql:
+    image: mysql:8.0
+    container_name: multiproto-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: multiproto_gather
+      MYSQL_USER: multiproto
+      MYSQL_PASSWORD: multiproto123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - multiproto-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # Redis缓存
+  redis:
+    image: redis:7-alpine
+    container_name: multiproto-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - multiproto-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # API网关服务
+  api-gateway:
+    build:
+      context: .
+      dockerfile: backend/api-gateway/Dockerfile
+    container_name: multiproto-api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=mysql+pymysql://multiproto:multiproto123@mysql:3306/multiproto_gather
+      - REDIS_URL=redis://redis:6379/0
+      - FLASK_ENV=production
+      - SECRET_KEY=your-secret-key-here
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - multiproto-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 任务调度器服务
+  task-scheduler:
+    build:
+      context: .
+      dockerfile: backend/task-scheduler/Dockerfile
+    container_name: multiproto-task-scheduler
+    ports:
+      - "8040:8040"
+    environment:
+      - DATABASE_URL=mysql+pymysql://multiproto:multiproto123@mysql:3306/multiproto_gather
+      - REDIS_URL=redis://redis:6379/0
+      - FLASK_ENV=production
+      - API_GATEWAY_URL=http://api-gateway:8000
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - multiproto-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8040/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # SSH采集器服务
+  ssh-collector:
+    build:
+      context: .
+      dockerfile: backend/ssh-collector/Dockerfile
+    container_name: multiproto-ssh-collector
+    ports:
+      - "8010:8010"
+    environment:
+      - DATABASE_URL=mysql+pymysql://multiproto:multiproto123@mysql:3306/multiproto_gather
+      - REDIS_URL=redis://redis:6379/0
+      - FLASK_ENV=production
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - multiproto-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # API采集器服务
+  api-collector:
+    build:
+      context: .
+      dockerfile: backend/api-collector/Dockerfile
+    container_name: multiproto-api-collector
+    ports:
+      - "8020:8020"
+    environment:
+      - DATABASE_URL=mysql+pymysql://multiproto:multiproto123@mysql:3306/multiproto_gather
+      - REDIS_URL=redis://redis:6379/0
+      - FLASK_ENV=production
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - multiproto-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8020/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # SNMP采集器服务
+  snmp-collector:
+    build:
+      context: .
+      dockerfile: backend/snmp-collector/Dockerfile
+    container_name: multiproto-snmp-collector
+    ports:
+      - "8030:8030"
+    environment:
+      - DATABASE_URL=mysql+pymysql://multiproto:multiproto123@mysql:3306/multiproto_gather
+      - REDIS_URL=redis://redis:6379/0
+      - FLASK_ENV=production
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - multiproto-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8030/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Netmiko SSH采集器服务
+  netmiko-ssh-collector:
+    build:
+      context: .
+      dockerfile: backend/netmiko-ssh-collector/Dockerfile
+    container_name: multiproto-netmiko-ssh-collector
+    ports:
+      - "8021:8021"
+    environment:
+      - DATABASE_URL=mysql+pymysql://multiproto:multiproto123@mysql:3306/multiproto_gather
+      - REDIS_URL=redis://redis:6379/0
+      - FLASK_ENV=production
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - multiproto-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8021/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Go SSH采集器服务
+  go-ssh-collector:
+    build:
+      context: .
+      dockerfile: backend/go-ssh-collector/Dockerfile
+    container_name: multiproto-go-ssh-collector
+    ports:
+      - "8022:8022"
+    environment:
+      - DATABASE_URL=mysql://multiproto:multiproto123@mysql:3306/multiproto_gather
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - multiproto-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8022/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 前端服务
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: multiproto-frontend
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend/nginx.conf:/etc/nginx/nginx.conf
+    networks:
+      - multiproto-network
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  multiproto-network:
+    driver: bridge
